@@ -24,7 +24,8 @@ vereadores <- read_html(u_ver) %>%
   janitor::clean_names() %>% 
   as_tibble() %>% 
   mutate(partido = partidos,
-         foto = foto_vereador)
+         foto = foto_vereador,
+         vereador = str_to_title(vereador))
 
 # Atividade Parlamentar
 
@@ -154,4 +155,11 @@ oficios <- map_dfr(1:8, ~scrap_cm(u_oficio, .x)) %>%
 atv_parlam <- bind_rows(indica, mocoes, oficios, prodeleg, proelo, prolec, prolei,
                         prores, req_info, requerimentos)
 
+atv_parlam_full <- atv_parlam %>% 
+  left_join(vereadores, c("autores" = "vereador"))
+
 write_csv(atv_parlam, "atv_parlam.csv")
+write_csv(vereadores, "vereadores.csv")
+write_csv(atv_parlam_full, "atv_parlam_full.csv")
+
+
