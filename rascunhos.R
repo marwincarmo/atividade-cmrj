@@ -94,16 +94,24 @@ scrap_cm <- function(materia, index) {
 # }
 # 
 # Projeto de resolução (rascunho da função)
-# u_base <- "http://www.camara.rj.gov.br/controle_atividade_parlamentar.php"
-# q_base <- list(
-#   "m1" =  "materias_leg",
-#   "m2" =  "10a_Leg",
-#   "m3" =  "prores",
-#   "url" = "http://mail.camara.rj.gov.br/APL/Legislativos/scpro1720.nsf/Internet/ResolucaoInt?OpenForm"
-# )
-# get_res <- GET(u_base, query = q_base)
-# read_html(get_res) %>% 
-#   xml_find_all('//table') %>%
-#   magrittr::extract2(2) %>% 
+ u_base <- "https://mail.camara.rj.gov.br/APL/Legislativos/scpro1720.nsf/Internet/ResolucaoInt"
+ q_base <- list(
+   "OpenForm" =  "")
+ get_res <- GET(u_base, query = q_base)
+ read_html(get_res) %>% 
+    xml_find_all('//table') %>%
+    magrittr::extract2(2) %>% 
+    html_table(fill = TRUE) %>% 
+    janitor::clean_names() %>% 
+     select(c("x", "x_3", "data_publ", "autor_es")) %>% 
+     set_names(c("prolei_num", "ementa", "data_publi", "autores")) %>% 
+     as_tibble() %>%
+     separate_rows(autores, sep = ",") %>% 
+     filter(str_detect(ementa, "^[A-Z]")) %>%
+     mutate(data_publi = mdy(data_publi),
+            ementa = str_squish(ementa)) %>% 
+     filter(data_publi > ymd(20161231)) %>% 
+     tail()
 
-
+# Criar uma visualização de quando os projetos de lei começam a ser votados;
+# os meses onde há maior atividade
