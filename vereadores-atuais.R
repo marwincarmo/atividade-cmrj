@@ -136,7 +136,7 @@ mocoes <- map_dfr(1:4, ~scrap_cm(u_moc, .x)) %>%
   mutate(materia = "Moções")
 
 # Requerimentos de Informação
-u_req_info <- "https://mail.camara.rj.gov.br/APL/Legislativos/scpro1720.nsf/Internet/MocaoEmentaInt"
+u_req_info <- "https://mail.camara.rj.gov.br/APL/Legislativos/scpro1720.nsf/Internet/ReqInfEmentaInt"
 req_info <- map_dfr(1:4, ~scrap_cm(u_req_info, .x)) %>% 
   mutate(materia = "Requerimentos de Informação")
   
