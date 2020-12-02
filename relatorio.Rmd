@@ -1,7 +1,7 @@
 ---
 title: "Relatório do projeto"
 author: "Marwin Carmo"
-date: "`r Sys.Date()`"
+date: "`r format(as.Date('02/12/2020', format = '%d/%m/%Y'), format = '%d/%m/%Y, %A')`"
 output: html_document
 ---
 
@@ -29,9 +29,9 @@ Em geral, todas as páginas coletadas para as Matérias Legislativas e Legislaç
 
 O site oferece as informações organizadas por **número**, por **ano**, ou por **autor**. Como o interesse do projeto é buscar os dados por ano, para facilitar a filtragem do material desejado a raspagem foi realizada pela aba **POR ANO** para a maioria das matérias legislativas, excetuando-se algumas que apresentaram uma estrutura diferente das demais.
 
-As páginas puderam ser acessadas com uma simples requisição `GET`, sem a necessidade de se incluírem parâmetros adicionais. A página principal de exibição dos resultados não nos mostra todos, sendo necessário ir clicando em "próximo" até se obter todos os resultados do ano desejado.
+As páginas puderam ser acessadas com uma simples requisição `GET` para a url e os parâmetros de query para a página desejada. A página principal de exibição dos resultados não nos mostra todos, sendo necessário ir clicando em "próximo" até se obter todos os resultados do ano desejado.
 
-### Bibliotecas utilizadas
+### Carregando os pacotes necessários
 
 ```{r library, echo=TRUE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -57,7 +57,7 @@ library(kableExtra)
 ```
 
 O valor de `Start` para a troca de página segue uma lógica pouco intuitiva. No exemplo acima, a primeira página começa em `1`, a seguinte é `1.99`, depois `1.198`, `1.297`, `1.396`, acrescentando 1 após o decimal e diminuindo 1 do último número.
-Para contornar este problema, optei por modificar o valor de `Count` para `1000`, já que assim conseguiria que a página me retornasse todos os resultados e, verificando que nenhuma ano retornava mais do que 1000 resultados, esta solução foi suficiente para obter os dados desejados, embora não ideal.
+Para contornar este problema, optei por modificar o valor de `Count` para `1000`, já que assim conseguiria que a página me retornasse todos os resultados. Verificando que nenhuma ano retornava mais do que 1000 resultados, esta solução foi suficiente para obter os dados desejados, embora não seja a ideal.
 
 ### Raspagem dos dados
 
@@ -65,11 +65,11 @@ Para contornar este problema, optei por modificar o valor de `Count` para `1000`
 
 As informações a respeito dos Projetos de Lei e demais matérias são apresentadas no formato de tabela. Assim, foi feita uma leitura do html da página por meio da função `xml2::read_html(get_materia)`, seguida de uma busca por todas as tabelas com `xml2::xml_find_all('//table')`.
 
-Obtida a tabela, renomeio as colunas para um formato mais fácil de leitura e manipulação com `janitor::clean_names()`. Seleciono então apenas as colunas com informações relevantes, descartando as outras "extra" vazias, renomeio-as novamente para nomes mais amigáveis e a transformo passo para `as_tibble()`.
+Obtida a tabela, renomeio as colunas para um formato mais fácil de leitura e manipulação com `janitor::clean_names()`. Seleciono então apenas as colunas com informações relevantes, descartando as outras "extra" vazias, renomeio-as novamente para nomes mais amigáveis e a transformo com `as_tibble()`.
 
-Os nomes dos autores dos projetos são, em grande maioria, separados por `,`. No entanto, ainda há alguns nomes separados por "E" e outras formas que devem ser corrigidos (ainda não foi feita esta correção neste projeto),
+Os nomes dos autores dos projetos são, em grande maioria, separados por `,`. No entanto, ainda há alguns nomes separados por "E" e outras formas e que devem ser corrigidos (ainda não foi feita esta correção neste projeto),
 
-Na coluna `ementa` há linhas com NAs e valores do ano, que não correspondem à observações com informações. A filtragem com `str_detect()` elimina essas observações.
+Na coluna `ementa` há linhas com `NA` e valores do ano que não correspondem à observações com informações. A filtragem com `str_detect()` as elimina.
 
 Por fim, a coluna com a data de publicação é transformada em `date`, a `ementa` é "limpa" de caracteres "estranhos" com um `str_squish()`,
 o nome dos `atuores` tem a primeira letra capitalizada com `str_to_title()` para uniformizar entre todos os dataframes relacionados e é retirado o título "Vereador/ Vereadora da frente do nome do parlamentar com `str_remove(autores, "(Vereador)(a*) ")`, também importante para se utilizar com outros dataframes relacionados.
@@ -106,11 +106,11 @@ read_rds("out/prolei.rds") %>% glimpse(.)
 #### Exceções: Projeto de Decreto Legislativo e Projeto de Resolução
 
 Para estas duas categorias foi necessário extrair os dados a partir da aba **POR NÚMERO**. Para o _Projetos de Decreto Legislativo_ a aba **POR ANO** não retornava o nome do(s) autor(es) e para o _Projeto de Resolução_, o site direciona para a página de _Projetos de Lei_.
-O modo de requisição dos dados foi basicamente o mesmo. Sendo alterada apenas a iteração das páginas para `Start` ao invés de `Expand`. Como são poucas páginas com resultados, de forma não ideal, coletei manualmente os valores de `Expand` para cada página. 
+O modo de requisição dos dados foi basicamente o mesmo. Sendo alterada apenas a iteração das páginas para `Start` ao invés de `Expand`. Como são poucas páginas com resultados, coletei manualmente os valores de `Expand` para cada página. Outra solução que precisa de melhor refinamento para não "quebrar" posteriormente.
 
 #### Vereadores Atuais
 
-Os resultados da página de vereadores atuais também estão dispostos no formato `table`, exigindo apenas uma busca para nodes deste tipo. No entanto, a foto e o partido dos vereadores não é retornado na tabela principal, necessitando que fossem buscados de forma separada por meio da classe e fossem extraídas as informações desejadas contidas nos atributos
+Os resultados da página de vereadores atuais também estão dispostos no formato `table`, exigindo apenas uma busca para nodes deste tipo. No entanto, a foto e o partido dos vereadores não são retornados na tabela principal, necessitando que fossem buscados de forma separada por meio da classe e fossem extraídas as informações desejadas contidas nos atributos
 
 ```{r veradores atuais, eval = FALSE}
 
@@ -136,12 +136,12 @@ vereadores <- read_html(u_ver) %>%
          foto = str_replace_all(foto, " ", "%20")) # troca espaço vazio consertando um link com este problema)
 ```
 
-Esta tabela apresentará a seguinte composição:
+Este dataframe apresentará a seguinte composição:
 
 ```{r, echo=TRUE}
 read_rds("out/vereadores.rds") %>% glimpse(.)
 ```
-* A coluna `foto` contém o link para foto do(a) parlamentar
+* A coluna `foto` contém o link para foto do(a) verador(a)
 * A coluna `vereador` contém o nome do(a) verador(a)
 * A coluna `partido` contém o partido do(a) verador(a)
 * A coluna `sala` contém o número da sala do(a) verador(a)
@@ -191,7 +191,7 @@ Obtida a página, os resultados são apresentados no formato de tabela, assim co
 
 Um função é aplicada coletando as faltas de todos os meses para cada ano (2017-2020) e posteriormente são unificadas em uma base de dados.
 
-Esta tabela apresentará a seguinte composição:
+Este dataframe apresentará a seguinte composição:
 
 ```{r, echo=TRUE}
 read_rds("out/df_faltas.rds") %>% glimpse(.)
@@ -204,7 +204,7 @@ read_rds("out/df_faltas.rds") %>% glimpse(.)
 * A coluna `nome_mes` especifica o nome do mês da falta observada
 * A coluna `mes` especifica o número do mês da falta observada
 
-## Apresentação dos dados
+# Apresentação dos dados
 
 ## Vereadores atuais (2017-2020)
 
@@ -243,7 +243,7 @@ reactable(atvp, filterable = TRUE, columns = list(
     autores = colDef(name = "Autores"),
     materia = colDef(name = "Matéria"),
     partido = colDef(name = "Partido"),
-    ementa = colDef(filterable = FALSE, name = "Ementa")))
+    ementa = colDef(name = "Ementa")))
 ```
 
 
@@ -295,11 +295,11 @@ read_rds("out/atv_parlam.rds") %>%
          y = "Volume de processos", x = "")
 ```
 
-# Relatório de Produção Legislativa
+## Relatório de Produção Legislativa
 
 Para esta análise, foi somado o número de participações de cada vereador(a) em Projetos de Lei e Projetos de Lei Complementares, formando a categoria das *Propostas*. A categoria *Em vigor*, foi obtida de forma semelhante, com a soma da participação de cada vereador em Leis Ordinárias e Leis Complementares em vigor a partir de 2017.
 
-Os vereadoores estão ordenados no gráfico em ordem decrescente pela proporção de participação em Projetos de Lei propostos e em vigor.
+Os vereadores estão ordenados no gráfico em ordem decrescente pela proporção de participação em Projetos de Lei propostos e em vigor.
 
 Um projeto que não tenha entrado em vigor não significa que necessariamente tenha sido vetado. Muitos ainda estão em discussão.
 
@@ -314,8 +314,8 @@ lmp <- read_rds("out/l_muni.rds")
 # A base de dados dos vereadores é carregada para retirar da análise das leis e 
 # projetos vereadores não ativos atualmente.
 vereadores <- vereadores %>% 
-    mutate(vereador = abjutils::rm_accent(vereador))
-
+    mutate(vereador = abjutils::rm_accent(vereador))%>% 
+    select(-c(foto, sala, telefone, e_mail))
 
 # Carrega a base com as Leis em vigor e soma todas as observações por candidato
 em_vigor <- lmp %>% 
@@ -336,16 +336,18 @@ projeto <- atvp %>%
 # Construção do gráfico
 projeto %>% 
     left_join(em_vigor, c("autores" = "autoria")) %>% 
+    left_join(vereadores, c("autores" = "vereador")) %>% 
+    mutate(autores = str_c(autores," " ,"(", partido, ")")) %>% 
     mutate(prop_aprv = n_vigor/n_projetos) %>% 
     mutate(autores = fct_reorder(autores, prop_aprv)) %>% 
     ggplot() + 
-    geom_col(aes(x = n_projetos, y = autores, fill = "Projetos apresentados")) +
-    geom_col(aes(x = n_vigor, y = autores, fill = "Em vigor")) +
+    geom_col(aes(x = n_projetos, y = autores, fill = "Projetos de Lei apresentados")) +
+    geom_col(aes(x = n_vigor, y = autores, fill = "Lei em vigor")) +
     scale_fill_manual(name="", values=c("#566573", "#D6EAF8"))+
       theme_classic(12) +
     theme(legend.position="top") +
       ggtitle("Participação em Projetos de Lei propostos e aprovados") +
-      labs(x = "Volume de Leis", y ="")
+      labs(x = "Número de Leis", y ="")
 
 ```
 
