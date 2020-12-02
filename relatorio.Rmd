@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -33,7 +33,7 @@ As páginas puderam ser acessadas com uma simples requisição `GET`, sem a nece
 
 ### Bibliotecas utilizadas
 
-```{r library, echo=TRUE, message=FALSE}
+```{r library, echo=TRUE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(rvest)
 library(httr)
@@ -57,43 +57,60 @@ library(kableExtra)
 ```
 
 O valor de `Start` para a troca de página segue uma lógica pouco intuitiva. No exemplo acima, a primeira página começa em `1`, a seguinte é `1.99`, depois `1.198`, `1.297`, `1.396`, acrescentando 1 após o decimal e diminuindo 1 do último número.
-Para contornar este problema, optei por modificar o valor de `Count` para `1000`, já que assim conseguiria que a página me retornasse todos os resultados e, verificando que nenhuma ano retornava mais do que 1000 resultados, esta solução foi suficiente para obter os dados desejados.
+Para contornar este problema, optei por modificar o valor de `Count` para `1000`, já que assim conseguiria que a página me retornasse todos os resultados e, verificando que nenhuma ano retornava mais do que 1000 resultados, esta solução foi suficiente para obter os dados desejados, embora não ideal.
 
 ### Raspagem dos dados
 
 #### Matérias Legislativas e Legislação Municipal
 
-As informações a respeito dos Projetos de Lei e demais matérias são apresentadas no formato de tabela. Assim, foi feita uma leitura do html da página por meio da função `xml2::read_html(get_materia)`, seguida de uma busca por todas as tabelas com `xml2::xml_find_all('//table')`:
+As informações a respeito dos Projetos de Lei e demais matérias são apresentadas no formato de tabela. Assim, foi feita uma leitura do html da página por meio da função `xml2::read_html(get_materia)`, seguida de uma busca por todas as tabelas com `xml2::xml_find_all('//table')`.
+
+Obtida a tabela, renomeio as colunas para um formato mais fácil de leitura e manipulação com `janitor::clean_names()`. Seleciono então apenas as colunas com informações relevantes, descartando as outras "extra" vazias, renomeio-as novamente para nomes mais amigáveis e a transformo passo para `as_tibble()`.
+
+Os nomes dos autores dos projetos são, em grande maioria, separados por `,`. No entanto, ainda há alguns nomes separados por "E" e outras formas que devem ser corrigidos (ainda não foi feita esta correção neste projeto),
+
+Na coluna `ementa` há linhas com NAs e valores do ano, que não correspondem à observações com informações. A filtragem com `str_detect()` elimina essas observações.
+
+Por fim, a coluna com a data de publicação é transformada em `date`, a `ementa` é "limpa" de caracteres "estranhos" com um `str_squish()`,
+o nome dos `atuores` tem a primeira letra capitalizada com `str_to_title()` para uniformizar entre todos os dataframes relacionados e é retirado o título "Vereador/ Vereadora da frente do nome do parlamentar com `str_remove(autores, "(Vereador)(a*) ")`, também importante para se utilizar com outros dataframes relacionados.
 
 ```{r raspagem, eval = FALSE}
 read_html(get_materia) %>%  # lê o html da página
     xml_find_all('//table') %>% # busca os nodes do tipo table
     magrittr::extract2(2) %>%   # extrai o segundo node, que contém a tabela principal
     html_table(fill = TRUE) %>% # leitura da tabela
-    janitor::clean_names() %>%  # renomeia as colunas para um formato mais fácil de leitura e manipulação
-    select(c("x_2", "ementa", "data_publ", "autor_es")) %>% # seleciona apenas as colunas com as informações desejadas. o restante é 'lixo'
-    set_names(c("prolei_num", "ementa", "data_publi", "autores")) %>% # renomeia as colunas para nomes mais amigáveis
-    as_tibble() %>% # transforma o dataframe em tibble
-    separate_rows(autores, sep = ",") %>% # separa autores do projeto em uma linha para cada. a maioria está separada por "," mas ainda há alguns nomes separados por "E" e que devem ser corrigidos depois (não foram neste projeto)
-    filter(str_detect(ementa, "^[A-Z]")) %>% # verifica na coluna ementa apenas as linhas que começam por letras. Há linhas com NAs e o ano que não correspondem à observações com informações
-    mutate(data_publi = mdy(data_publi), # este mutate transforma a data de character 
-           ementa = str_squish(ementa),  # para date; elimina "sujeiras" no texto da
-           autores = str_to_title(autores), # ementa; torna maiúsculos apenas o nome e 
-           autores = str_remove(autores, "(Vereador)(a*) ")) # sobrenome dos autores;
-# e retira o título vereador/Vereadora da frente do nome. 
-# Estes dois últimos passos do mutate são importantes para unificar posteriormente 
-# este dataframe com o dataframe contendo as informações dos candidatos.
+    janitor::clean_names() %>%  
+    select(c("x_2", "ementa", "data_publ", "autor_es")) %>% # 
+    set_names(c("prolei_num", "ementa", "data_publi", "autores")) %>% 
+    as_tibble() %>% 
+    separate_rows(autores, sep = ",") %>% 
+    filter(str_detect(ementa, "^[A-Z]")) %>%
+    mutate(data_publi = mdy(data_publi), 
+           ementa = str_squish(ementa),  
+           autores = str_to_title(autores), 
+           autores = str_remove(autores, "(Vereador)(a*) ")) 
+
 ```
 
+Esta tabela apresentará a seguinte composição:
 
-#### Projeto de Decreto Legislativo e Projeto de Resolução
+```{r, echo=TRUE}
+read_rds("out/prolei.rds") %>% glimpse(.)
+```
+* A coluna `prolei_num` apresenta o número do Projeto de Lei
+* A coluna `ementa` apresenta a ementa da proposta
+* A coluna `data_publi` apresenta a data de publicação do projeto
+* A coluna `autores` apresenta por linha cada autor do projeto
+* A coluna `materia` é adicionada posteriormente na função que coleta os dados, e apresenta o tipo de matéria. Será útil quando os dataframes com todas as matérias forem unificados
+
+#### Exceções: Projeto de Decreto Legislativo e Projeto de Resolução
 
 Para estas duas categorias foi necessário extrair os dados a partir da aba **POR NÚMERO**. Para o _Projetos de Decreto Legislativo_ a aba **POR ANO** não retornava o nome do(s) autor(es) e para o _Projeto de Resolução_, o site direciona para a página de _Projetos de Lei_.
 O modo de requisição dos dados foi basicamente o mesmo. Sendo alterada apenas a iteração das páginas para `Start` ao invés de `Expand`. Como são poucas páginas com resultados, de forma não ideal, coletei manualmente os valores de `Expand` para cada página. 
 
 #### Vereadores Atuais
 
-Os resultados da página de veradores atuais também estão dispostos no formato `table`, exigindo apenas uma busca para nodes deste tipo. No entanto, a foto e o partido dos veradores não é retornado na tabela principal, necessitando que fossem buscados de forma separada por meio da classe e fossem extraídas as informações desejadas contidas nos atributos
+Os resultados da página de vereadores atuais também estão dispostos no formato `table`, exigindo apenas uma busca para nodes deste tipo. No entanto, a foto e o partido dos vereadores não é retornado na tabela principal, necessitando que fossem buscados de forma separada por meio da classe e fossem extraídas as informações desejadas contidas nos atributos
 
 ```{r veradores atuais, eval = FALSE}
 
@@ -115,8 +132,21 @@ vereadores <- read_html(u_ver) %>%
   as_tibble() %>% 
   mutate(partido = partidos,
          foto = foto_vereador,
-         vereador = str_to_title(vereador))
+         vereador = str_to_title(vereador),
+         foto = str_replace_all(foto, " ", "%20")) # troca espaço vazio consertando um link com este problema)
 ```
+
+Esta tabela apresentará a seguinte composição:
+
+```{r, echo=TRUE}
+read_rds("out/vereadores.rds") %>% glimpse(.)
+```
+* A coluna `foto` contém o link para foto do(a) parlamentar
+* A coluna `vereador` contém o nome do(a) verador(a)
+* A coluna `partido` contém o partido do(a) verador(a)
+* A coluna `sala` contém o número da sala do(a) verador(a)
+* A coluna `telefone` contém os números de telefone do(a) verador(a)
+* A coluna `e_mail` contém o email do(a) verador(a)
 
 #### Frequência dos veradores
 
@@ -125,15 +155,17 @@ A página de frequência dos vereadores é a que se diferencia um pouco mais das
 Obtida a página, os resultados são apresentados no formato de tabela, assim como nas demais. No entanto, o nome das colunas não é retornado na tabela obtida, sendo necessário buscá-los por meio da classe dos nodes: `xml_find_all("//td[contains(@class, 'azul-claro')]`
 
 ```{r frequencia dos veradores, eval = FALSE}
-u <- "http://www.camara.rj.gov.br/vereadores_frequencia.php?m1=materias_leg&m2=freq"
 # url base
-b <- list(
+  u <- "http://www.camara.rj.gov.br/vereadores_frequencia.php?m1=materias_leg&m2=freq"
+
+# Parâmetros do corpo da requisição
+  b <- list(
         "ano" = ano, # definido de forma numérica
         "mes" = paste0(n_mes, "|", mes), # utiliza o formato (número do mês)|(nome do mês), por exemplo: "2|Fevereiro"
         "sessao" = 1, # não muda
         "submit" = "Consultar" # não muda; realiza a consulta
     )
-# Parâmetros do corpo da requisição    
+
     r <- POST(u, body = b)
     t <- read_html(r) %>% 
         xml_find_first('//table') %>% 
@@ -149,36 +181,79 @@ b <- list(
             janitor::clean_names() %>%  
             slice(-1) %>%  # elimina a primeira linha que não contém informações
             mutate(ano = ano, # cria uma coluna com o ano da consulta
-                   nome_mes = str_to_lower(mes), # cria uma coluna com o nome do mes da consulta e passa para lowercase
-                   mes = n_mes, # cria uma coluna com o numero do mes da consulta
+                   nome_mes = str_to_lower(mes), # coluna com o nome do mes da consulta e passa para lowercase
+                   mes = n_mes, # coluna com o numero do mes da consulta
                    faltas = as.double(faltas), 
                    faltas_abonadas = as.double(faltas_abonadas),
                    total_de_faltas = as.double(total_de_faltas))
         # por fim, transforma as colunas com o numero de faltas em double
 ```
 
+Um função é aplicada coletando as faltas de todos os meses para cada ano (2017-2020) e posteriormente são unificadas em uma base de dados.
+
+Esta tabela apresentará a seguinte composição:
+
+```{r, echo=TRUE}
+read_rds("out/df_faltas.rds") %>% glimpse(.)
+```
+* A coluna `vereador` contém o nome do(a) verador(a)
+* A coluna `faltas` contém as faltas totais do(a) verador(a)
+* A coluna `faltas_abonadas` contém as faltas abonadas do(a) verador(a)
+* A coluna `total_de_faltas` contém as faltas totais, descontadas as abonadas
+* A coluna `ano` especifica o ano da falta observada
+* A coluna `nome_mes` especifica o nome do mês da falta observada
+* A coluna `mes` especifica o número do mês da falta observada
+
 ## Apresentação dos dados
 
 ## Vereadores atuais (2017-2020)
 
-```{r, echo = FALSE, message=FALSE}
+A tabela apresenta os parlamentares em atividade no período de 2017 a 2020.
+Não estão presentes vereadores(as) afastados(as) ou substtuídos(as).
 
-vereadores <- read_csv("vereadores.csv")
+```{r, echo = TRUE, message=FALSE}
+
+vereadores <- read_rds("out/vereadores.rds")
 
 vereadores %>% 
     mutate(foto = "") %>% 
     kbl(align = "c") %>% 
     column_spec(1, image =  spec_image(vereadores$foto, 
                                        width = 120, height = 120)) %>% 
-    kable_styling(full_width = TRUE) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                  full_width = TRUE) %>% 
     scroll_box(width = "100%", height = "500px")
 
 ```
 
-## Frequencia
-```{r faltas, echo=FALSE, message=FALSE,fig.width = 8, fig.height = 12}
-faltas <- read_csv("df_faltas.csv")
-vereadores <- read_csv("vereadores.csv")
+## Tabela geral
+
+Nesta tabela é possível explorar todos as matérias legislativas registradas durante o período da 10ª Legislatura, entre Projetos de Emenda à Lei Orgânica, Projetos de Lei Complementar, Projetos de Lei, Projetos de Decreto Legislativo, Projetos de Resolução, Indicações, Moções, Requerimentos de Informação e Requerimentos e Ofícios.
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+library(reactable)
+atvp <- read_rds("out/atv_parlam.rds")
+atvp <- atvp %>% 
+    select(-c(foto, sala, telefone, e_mail)) %>% 
+    mutate(ementa = str_to_lower(ementa),
+           ementa = str_remove(ementa, " =.*"))
+reactable(atvp, filterable = TRUE, columns = list(
+    prolei_num = colDef(name = "Nº do Projeto"),
+    data_publi = colDef(name = "Data de publicação"),
+    autores = colDef(name = "Autores"),
+    materia = colDef(name = "Matéria"),
+    partido = colDef(name = "Partido"),
+    ementa = colDef(filterable = FALSE, name = "Ementa")))
+```
+
+
+## Frequência dos Vereadores
+
+O gráfico mostra o número total de faltas não abonadas por vereador(a).
+
+```{r faltas, echo=TRUE, message=FALSE,fig.width = 8, fig.height = 12}
+faltas <- read_rds("out/df_faltas.rds")
+vereadores <- read_rds("out/vereadores.rds")
 
 plot(faltas %>% 
     left_join(vereadores, by = "vereador") %>% 
@@ -195,21 +270,82 @@ plot(faltas %>%
 
 ```
 
-## Tabela geral
 
-```{r, echo=FALSE, message=FALSE}
-library(reactable)
-atvp <- read_csv("atv_parlam_full.csv")
-atvp <- atvp %>% 
+## Volume de atividade por mês
+
+Este gráfico apresenta o volume de atividade registrado mensalmente e separado por ano. O volume de processos representa qualquer atividade registrada considerando-se as matérias legislativas coletadas.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE, fig.width = 10}
+
+read_rds("out/atv_parlam.rds") %>% 
     select(-c(foto, sala, telefone, e_mail)) %>% 
-    mutate(ementa = str_to_lower(ementa),
-           ementa = str_remove(ementa, " =.*"))
-reactable(atvp, filterable = TRUE, columns = list(
-    prolei_num = colDef(name = "Nº do Projeto"),
-    data_publi = colDef(name = "Data de publicação"),
-    autores = colDef(name = "Autores"),
-    materia = colDef(name = "Matéria"),
-    partido = colDef(name = "Partido"),
-    ementa = colDef(filterable = FALSE, name = "Ementa")))
+    mutate(mes = month(data_publi, label = TRUE),
+           ano = year(data_publi),
+           id = group_indices(., prolei_num, materia)) %>% 
+    filter(!is.na(mes), 
+           !is.na(ano),
+           ano >= 2017) %>% 
+    group_by(mes, ano) %>%
+    summarise(n = n_distinct(id), .groups = "drop") %>% 
+    mutate(ano = as_factor(ano)) %>% 
+    ggplot(aes(x = mes, y = n, group=factor(ano), colour=factor(ano))) +
+    geom_line(size = 0.8) +
+    theme_minimal(12) +
+    labs(colour = "Ano",
+         y = "Volume de processos", x = "")
+```
+
+# Relatório de Produção Legislativa
+
+Para esta análise, foi somado o número de participações de cada vereador(a) em Projetos de Lei e Projetos de Lei Complementares, formando a categoria das *Propostas*. A categoria *Em vigor*, foi obtida de forma semelhante, com a soma da participação de cada vereador em Leis Ordinárias e Leis Complementares em vigor a partir de 2017.
+
+Os vereadoores estão ordenados no gráfico em ordem decrescente pela proporção de participação em Projetos de Lei propostos e em vigor.
+
+Um projeto que não tenha entrado em vigor não significa que necessariamente tenha sido vetado. Muitos ainda estão em discussão.
+
+```{r projetos, echo=TRUE, message=FALSE,fig.width = 8, fig.height = 12}
+
+# Foi observado um conflito devido à não acentuação de alguns nomes de vereadores 
+# na base de dados das Leis Ordinárias e Complementares.
+# A função abjutils::rm_accent() foi utilizada para uniformizar os nomes das bases relacionadas.
+
+lmp <- read_rds("out/l_muni.rds")
+
+# A base de dados dos vereadores é carregada para retirar da análise das leis e 
+# projetos vereadores não ativos atualmente.
+vereadores <- vereadores %>% 
+    mutate(vereador = abjutils::rm_accent(vereador))
+
+
+# Carrega a base com as Leis em vigor e soma todas as observações por candidato
+em_vigor <- lmp %>% 
+    mutate(autoria = abjutils::rm_accent(autoria)) %>% 
+    filter(autoria %in% vereadores$vereador) %>% 
+    group_by(autoria) %>% 
+    summarise(n_vigor = n_distinct(id), .groups = "drop")
+
+# salva em um novo objeto somente as observações com as matérias de interesse
+projeto <- atvp %>% 
+    mutate(autores = abjutils::rm_accent(autores)) %>% 
+    filter(autores %in% vereadores$vereador) %>%
+    filter(materia %in% c("Projeto de Lei", "Projeto de Lei Complementar")) %>% 
+    mutate(id = group_indices(., prolei_num, materia)) %>% 
+    group_by(autores) %>% 
+    summarise(n_projetos = n_distinct(id), .groups = "drop")
+
+# Construção do gráfico
+projeto %>% 
+    left_join(em_vigor, c("autores" = "autoria")) %>% 
+    mutate(prop_aprv = n_vigor/n_projetos) %>% 
+    mutate(autores = fct_reorder(autores, prop_aprv)) %>% 
+    ggplot() + 
+    geom_col(aes(x = n_projetos, y = autores, fill = "Projetos apresentados")) +
+    geom_col(aes(x = n_vigor, y = autores, fill = "Em vigor")) +
+    scale_fill_manual(name="", values=c("#566573", "#D6EAF8"))+
+      theme_classic(12) +
+    theme(legend.position="top") +
+      ggtitle("Participação em Projetos de Lei propostos e aprovados") +
+      labs(x = "Volume de Leis", y ="")
+
 ```
 
