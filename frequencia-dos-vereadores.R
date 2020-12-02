@@ -57,7 +57,8 @@ get_faltas <- possibly(
                    mes = n_mes,
                    faltas = as.double(faltas),
                    faltas_abonadas = as.double(faltas_abonadas),
-                   total_de_faltas = as.double(total_de_faltas))
+                   total_de_faltas = as.double(total_de_faltas),
+                   vereador = str_to_title(vereador))
         faltas
     
 }, NULL)

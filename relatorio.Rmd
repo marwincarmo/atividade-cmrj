@@ -19,30 +19,31 @@ A escolha desta página para análise foi motivada pela falta de recursos facilm
 
 As informações aqui apresentadas se referem à 10ª Legislatura, que compreende o os anos de 2017 a 2020.
 
-Primeiro será apresentada a composição atual da Câmara Municipal e a frequência dos parlamentares.
+Será apresentada a composição atual da Câmara Municipal, a frequência dos parlamentares e as atividades realizadas durante este período.
 
-Em relação à atividade parlamentar, buscou-se informações a respeito de Projetos de Emenda à Lei Orgânica, Projetos de Lei Complementar, Projetos de Lei, Projetos de Decreto Legislativo, Projetos de Resolução, Indicações, Moções, Requerimentos de Informação, Requerimentos e Ofícios. Também foram coletadas as Leis Complementares e Emendas à Lei Orgânica que entraram em vigor no período especificado.
+Em relação à atividade parlamentar, buscou-se informações a respeito de Projetos de Emenda à Lei Orgânica, Projetos de Lei Complementar, Projetos de Lei, Projetos de Decreto Legislativo, Projetos de Resolução, Indicações, Moções, Requerimentos de Informação e Requerimentos e Ofícios. Também foram coletadas as Leis Complementares e Emendas à Lei Orgânica que entraram em vigor no período especificado.
 
 ## Fluxo do webscrapping
 
-Em geral, todas as páginas coletadas apresentaram uma estrutura similar. Para exemplificar, irei apresentar a raspagem feita na página de Projetos de Lei.
+Em geral, todas as páginas coletadas para as Matérias Legislativas e Legislação Municipal apresentaram uma estrutura similar. Para exemplificar, irei apresentar a raspagem feita na página de _Projetos de Lei_.
 
-O site oferece as informações organizadas por **número**, por **ano**, ou por **autor**. Como o interesse do projeto é buscar os dados por ano, para facilitar a filtragem do material desejado a raspagem foi realizada pela aba **POR ANO** para a maioria das matérias legislativas, excetuando-se algumas que apresentaram uma estrutura diferente das demais, e que serão apresentadas ao final desta sessão.
+O site oferece as informações organizadas por **número**, por **ano**, ou por **autor**. Como o interesse do projeto é buscar os dados por ano, para facilitar a filtragem do material desejado a raspagem foi realizada pela aba **POR ANO** para a maioria das matérias legislativas, excetuando-se algumas que apresentaram uma estrutura diferente das demais.
 
-As páginas puderam ser acessadas com uma simples requisição GET, sem a necessidade de se incluírem parâmetros adicionais. A página principal de exibição dos resultados não nos mostra todos, sendo necessário ir clicando em "próximo" até se obter todos os resultados do ano desejado.
+As páginas puderam ser acessadas com uma simples requisição `GET`, sem a necessidade de se incluírem parâmetros adicionais. A página principal de exibição dos resultados não nos mostra todos, sendo necessário ir clicando em "próximo" até se obter todos os resultados do ano desejado.
 
-## Bibliotecas utilizadas
+### Bibliotecas utilizadas
 
-```{r library, eval = FALSE}
+```{r library, echo=TRUE, message=FALSE}
 library(tidyverse)
 library(rvest)
 library(httr)
 library(lubridate)
-
+library(knitr)
+library(kableExtra)
 ```
 
 
-### Os headers de requisição foram
+### Headers de requisição
 
 ``` {r requisicao, eval = FALSE}
   u_base <- "https://mail.camara.rj.gov.br/APL/Legislativos/scpro1720.nsf/Internet/LeiEmentaInt"
@@ -58,7 +59,9 @@ library(lubridate)
 O valor de `Start` para a troca de página segue uma lógica pouco intuitiva. No exemplo acima, a primeira página começa em `1`, a seguinte é `1.99`, depois `1.198`, `1.297`, `1.396`, acrescentando 1 após o decimal e diminuindo 1 do último número.
 Para contornar este problema, optei por modificar o valor de `Count` para `1000`, já que assim conseguiria que a página me retornasse todos os resultados e, verificando que nenhuma ano retornava mais do que 1000 resultados, esta solução foi suficiente para obter os dados desejados.
 
-## Raspagem dos dados
+### Raspagem dos dados
+
+#### Matérias Legislativas e Legislação Municipal
 
 As informações a respeito dos Projetos de Lei e demais matérias são apresentadas no formato de tabela. Assim, foi feita uma leitura do html da página por meio da função `xml2::read_html(get_materia)`, seguida de uma busca por todas as tabelas com `xml2::xml_find_all('//table')`:
 
@@ -83,8 +86,130 @@ read_html(get_materia) %>%  # lê o html da página
 ```
 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#### Projeto de Decreto Legislativo e Projeto de Resolução
+
+Para estas duas categorias foi necessário extrair os dados a partir da aba **POR NÚMERO**. Para o _Projetos de Decreto Legislativo_ a aba **POR ANO** não retornava o nome do(s) autor(es) e para o _Projeto de Resolução_, o site direciona para a página de _Projetos de Lei_.
+O modo de requisição dos dados foi basicamente o mesmo. Sendo alterada apenas a iteração das páginas para `Start` ao invés de `Expand`. Como são poucas páginas com resultados, de forma não ideal, coletei manualmente os valores de `Expand` para cada página. 
+
+#### Vereadores Atuais
+
+Os resultados da página de veradores atuais também estão dispostos no formato `table`, exigindo apenas uma busca para nodes deste tipo. No entanto, a foto e o partido dos veradores não é retornado na tabela principal, necessitando que fossem buscados de forma separada por meio da classe e fossem extraídas as informações desejadas contidas nos atributos
+
+```{r veradores atuais, eval = FALSE}
+
+u_ver <- "http://www.camara.rj.gov.br/vereadores_atuais.php?m1=vereadores&m2=ver_atuais&m3=por_nome"
+
+partidos <- read_html(u_ver) %>% 
+  xml_find_all("//td[@class='td3']//img") %>% 
+  xml_attr("title") %>% 
+  str_squish()
+
+foto_vereador <- read_html(u_ver) %>% 
+  xml_find_all("//td[@class='td3']//img") %>% 
+  xml_attr("src")
+
+vereadores <- read_html(u_ver) %>% 
+  xml_find_first('//table') %>% 
+  html_table(header = TRUE) %>% 
+  janitor::clean_names() %>% 
+  as_tibble() %>% 
+  mutate(partido = partidos,
+         foto = foto_vereador,
+         vereador = str_to_title(vereador))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+#### Frequência dos veradores
+
+A página de frequência dos vereadores é a que se diferencia um pouco mais das anteriores. Ela solicita uma requisição `POST` e os parâmetros de consulta são definidos em Request, em que os parâmetros variáveis são `"ano"` e `"mes"`.
+
+Obtida a página, os resultados são apresentados no formato de tabela, assim como nas demais. No entanto, o nome das colunas não é retornado na tabela obtida, sendo necessário buscá-los por meio da classe dos nodes: `xml_find_all("//td[contains(@class, 'azul-claro')]`
+
+```{r frequencia dos veradores, eval = FALSE}
+u <- "http://www.camara.rj.gov.br/vereadores_frequencia.php?m1=materias_leg&m2=freq"
+# url base
+b <- list(
+        "ano" = ano, # definido de forma numérica
+        "mes" = paste0(n_mes, "|", mes), # utiliza o formato (número do mês)|(nome do mês), por exemplo: "2|Fevereiro"
+        "sessao" = 1, # não muda
+        "submit" = "Consultar" # não muda; realiza a consulta
+    )
+# Parâmetros do corpo da requisição    
+    r <- POST(u, body = b)
+    t <- read_html(r) %>% 
+        xml_find_first('//table') %>% 
+        html_table(fill = TRUE)
+    faltas <- t %>% 
+            as_tibble() %>% 
+            set_names(xml_find_all(
+                read_html(r), 
+                    "//td[contains(@class, 'azul-claro')]") %>% # busca pelo título
+                    html_text() %>%     # das colunas, extrai o texto e "limpa" com
+                    str_squish()        # o str_squish()
+                ) %>% 
+            janitor::clean_names() %>%  
+            slice(-1) %>%  # elimina a primeira linha que não contém informações
+            mutate(ano = ano, # cria uma coluna com o ano da consulta
+                   nome_mes = str_to_lower(mes), # cria uma coluna com o nome do mes da consulta e passa para lowercase
+                   mes = n_mes, # cria uma coluna com o numero do mes da consulta
+                   faltas = as.double(faltas), 
+                   faltas_abonadas = as.double(faltas_abonadas),
+                   total_de_faltas = as.double(total_de_faltas))
+        # por fim, transforma as colunas com o numero de faltas em double
+```
+
+## Apresentação dos dados
+
+## Vereadores atuais (2017-2020)
+
+```{r, echo = FALSE, message=FALSE}
+
+vereadores <- read_csv("vereadores.csv")
+
+vereadores %>% 
+    mutate(foto = "") %>% 
+    kbl(align = "c") %>% 
+    column_spec(1, image =  spec_image(vereadores$foto, 
+                                       width = 120, height = 120)) %>% 
+    kable_styling(full_width = TRUE) %>% 
+    scroll_box(width = "100%", height = "500px")
+
+```
+
+## Frequencia
+```{r faltas, echo=FALSE, message=FALSE,fig.width = 8, fig.height = 12}
+faltas <- read_csv("df_faltas.csv")
+vereadores <- read_csv("vereadores.csv")
+
+plot(faltas %>% 
+    left_join(vereadores, by = "vereador") %>% 
+    filter(!is.na(partido)) %>% 
+    mutate(vereador = str_c(vereador," " ,"(", partido, ")")) %>% 
+    group_by(vereador) %>% 
+    summarise(n_faltas = sum(total_de_faltas), .groups = "drop") %>% 
+    mutate(vereador = fct_reorder(vereador, n_faltas)) %>% 
+    ggplot(aes(x = n_faltas, y  = vereador)) + 
+    geom_col(fill = "darkred") +
+    theme_minimal(12) +
+    labs(y = "", x = "", 
+         title = "Número de faltas não abonadas no período 2017-2020"))
+
+```
+
+## Tabela geral
+
+```{r, echo=FALSE, message=FALSE}
+library(reactable)
+atvp <- read_csv("atv_parlam_full.csv")
+atvp <- atvp %>% 
+    select(-c(foto, sala, telefone, e_mail)) %>% 
+    mutate(ementa = str_to_lower(ementa),
+           ementa = str_remove(ementa, " =.*"))
+reactable(atvp, filterable = TRUE, columns = list(
+    prolei_num = colDef(name = "Nº do Projeto"),
+    data_publi = colDef(name = "Data de publicação"),
+    autores = colDef(name = "Autores"),
+    materia = colDef(name = "Matéria"),
+    partido = colDef(name = "Partido"),
+    ementa = colDef(filterable = FALSE, name = "Ementa")))
+```
+
