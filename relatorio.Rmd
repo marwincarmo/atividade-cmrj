@@ -40,6 +40,7 @@ library(httr)
 library(lubridate)
 library(knitr)
 library(kableExtra)
+library(highcharter)
 ```
 
 
@@ -208,8 +209,7 @@ read_rds("out/df_faltas.rds") %>% glimpse(.)
 
 ## Vereadores atuais (2017-2020)
 
-A tabela apresenta os parlamentares em atividade no período de 2017 a 2020.
-Não estão presentes vereadores(as) afastados(as) ou substtuídos(as).
+A tabela abaixo apresenta os parlamentares em atividade no período de 2017 a 2020. Não estão presentes vereadores(as) afastados(as) ou substtuídos(as).
 
 ```{r, echo = TRUE, message=FALSE}
 
@@ -219,16 +219,33 @@ vereadores %>%
     mutate(foto = "") %>% 
     kbl(align = "c") %>% 
     column_spec(1, image =  spec_image(vereadores$foto, 
-                                       width = 120, height = 120)) %>% 
+                                       width = 180, height = 150)) %>% 
     kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
                   full_width = TRUE) %>% 
     scroll_box(width = "100%", height = "500px")
 
+
+
 ```
 
-## Tabela geral
+```{r}
+vereadores %>% 
+    count(partido) %>% 
+    mutate(prop = n/sum(n)) %>% 
+    hchart("treemap",
+           hcaes(x = partido, value = n, color = prop)) %>% 
+    hc_title(text = "Composição da Câmara Municipal por partido",
+             style = list(fontWeight = "bold", fontSize = "25px"),
+             align = "center"
+    )
 
-Nesta tabela é possível explorar todos as matérias legislativas registradas durante o período da 10ª Legislatura, entre Projetos de Emenda à Lei Orgânica, Projetos de Lei Complementar, Projetos de Lei, Projetos de Decreto Legislativo, Projetos de Resolução, Indicações, Moções, Requerimentos de Informação e Requerimentos e Ofícios.
+```
+
+
+
+## Atividade Parlamentar
+
+Nesta tabela é possível explorar todos a atividade dos(as) vereadore(as) registradas durante o período da 10ª Legislatura, entre Projetos de Emenda à Lei Orgânica, Projetos de Lei Complementar, Projetos de Lei, Projetos de Decreto Legislativo, Projetos de Resolução, Indicações, Moções, Requerimentos de Informação e Requerimentos e Ofícios.
 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
 library(reactable)
@@ -236,7 +253,8 @@ atvp <- read_rds("out/atv_parlam.rds")
 atvp <- atvp %>% 
     select(-c(foto, sala, telefone, e_mail)) %>% 
     mutate(ementa = str_to_lower(ementa),
-           ementa = str_remove(ementa, " =.*"))
+           ementa = str_remove(ementa, " =.*"),
+           data_publi = format(data_publi, format = '%d/%m/%Y'))
 reactable(atvp, filterable = TRUE, columns = list(
     prolei_num = colDef(name = "Nº do Projeto"),
     data_publi = colDef(name = "Data de publicação"),
