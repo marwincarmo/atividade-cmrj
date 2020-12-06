@@ -232,7 +232,8 @@ pleg_fun <- function(p_num) {
         mutate(data_publi = mdy(data_publi),
                ementa = str_squish(ementa),
                autores = str_to_title(autores),
-               autores = str_remove(autores, "(Vereador)(a*) "))
+               autores = str_remove(autores, "(Vereador)(a*) "),
+               materia = "Projeto de Decreto Legislativo")
 }
 prodeleg <-  map_dfr(c(1,100,199), ~pleg_fun(.x)) %>% 
     filter(data_publi > ymd(20161231))  # filtra somente a data de publicação a partir de 2017
@@ -263,7 +264,8 @@ pres_fun <- function() {
         mutate(data_publi = mdy(data_publi),
                ementa = str_squish(ementa),
                autores = str_to_title(autores),
-               autores = str_remove(autores, "(Vereador)(a*) ")) %>% 
+               autores = str_remove(autores, "(Vereador)(a*) "),
+               materia = "Projeto de Resolução") %>% 
         filter(data_publi > ymd(20161231))
 }
 
