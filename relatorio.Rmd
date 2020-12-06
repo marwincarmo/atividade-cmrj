@@ -1,7 +1,7 @@
 ---
 title: "Relatório do projeto"
 author: "Marwin Carmo"
-date: "`r format(as.Date('02/12/2020', format = '%d/%m/%Y'), format = '%d/%m/%Y, %A')`"
+date: "`r format(as.Date('05/12/2020', format = '%d/%m/%Y'), format = '%d/%m/%Y, %A')`"
 output: html_document
 ---
 
