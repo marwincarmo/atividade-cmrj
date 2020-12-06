@@ -7,7 +7,7 @@ library(lubridate)
 
 # Crio uma pasta de saída onde os arquivos rds serão armazenados
 
-dir.create("out")
+#dir.create("out")
 
 
 # Composição da Câmara ----------------------------------------------------
